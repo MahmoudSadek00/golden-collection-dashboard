@@ -84,6 +84,9 @@ FROZEN_PERIODS = {"2026 Q3"}           # scores for these periods come from KPI_
 # Rules from the "CS & Logistics Bonus Calculator" (Logistics KPIs tab). Logistics is scored as one team.
 # --------------------------------------------------------------------------------------------------------------
 LOGI_TAB = "Logistics_Daily"
+LOGI_2025_TAB = "2025 All Orders"      # same layout as Combined; rolled up to Logistics_Daily rows by the app
+LOGI_2025_COLUMNS = ["Source", "Reference Number", "Shipping Date", "Order Date", "Country", "Status", "Delivery Date",
+                     "Order Value (USD)", "New Customer Orders", "Returning Customer Orders"]
 LOGI_COLUMNS = ["Date", "Country", "Orders", "Delivered", "Returned", "Pending", "Cancelled", "Not Shipped", "Shipped",
                 "Shipped Delivered", "Shipped Returned", "Shipped Pending", "Order Value USD", "Delivered Value USD",
                 "Returned Value USD", "Refund USD", "Lead Days Sum", "Lead Days Count", "Delivery Days Sum",

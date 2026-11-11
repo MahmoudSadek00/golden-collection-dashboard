@@ -42,8 +42,10 @@ def page() -> None:
             met = [k for k in keys if k in T and target_met(k, t.get(k), T[k])]
             miss = [k for k in keys if k in T and target_met(k, t.get(k), T[k]) is False]
             ach = {k: achievement(k, t.get(k), T[k]) for k in keys if k in T and not is_missing(t.get(k)) and k != "score"}
-            best = max(ach, key=ach.get) if ach else None
-            worst = min(ach, key=ach.get) if ach else None
+            on = {k: a for k, a in ach.items() if k in met}
+            off = {k: a for k, a in ach.items() if k in miss}
+            best = max(on, key=on.get) if on else None          # only a KPI on target can be "strongest"
+            worst = min(off, key=off.get) if off else None      # only a KPI below target can be "weakest"
             sc = t.get("score")
             st.markdown(f"""<div class="gc-card"><div class="gc-kpi-label"><span>{C.esc(g)}</span>
                 <span style="color:{TH.MUTED}">{n} agents</span></div>

@@ -20,6 +20,8 @@ OPS_KEYS = ["l_orders", "l_shipped", "l_delivered", "l_returned", "l_return_rate
             "l_dlv_days", "l_lead_days", "l_delivered_value"]
 CMP_KEYS = ["l_score", "l_delivery", "l_ontime", "l_markets", "l_return_rate", "l_cancel_rate", "l_dlv_days",
             "l_lead_days", "l_orders", "l_shipped", "l_delivered_value"]
+CHART_KEYS = ["l_score", "l_delivery", "l_ontime", "l_return_rate", "l_cancel_rate", "l_dlv_days", "l_lead_days",
+              "l_orders", "l_shipped"]      # value is left out of the change chart (currency issues distort it)
 PLOT_CFG = {"displayModeBar": False}
 
 
@@ -131,8 +133,9 @@ def insights(ds, cur, prev, ctry) -> list:
                                "Late deliveries hurt customer experience and cost score points (85% or less = 0).",
                                f"Review shipments in {L.name(low.iloc[0].country)} first." if len(low) else "",
                                basis, (t - v) * 100))
-        elif tp and not is_missing(tp.get(k)) and trend(k, v, tp[k]) == "improved":
-            out.append(Insight("positive", "KPI", f"{label} improved to {fmt(k, v)}", f"{label} {fmt(k, v)}{prev_txt}.",
+        if tp and not is_missing(tp.get(k)) and trend(k, v, tp[k]) == "improved":
+            out.append(Insight("positive", "KPI", f"{label} improved: {fmt_delta(k, v - tp[k])} vs {pl}",
+                               f"{label} {fmt(k, v)}{prev_txt}." + ("" if v >= t else f" Still below the {fmt(k, t)} target."),
                                basis=basis, weight=(v - tp[k]) * 100))
 
     outside = bc[bc["within"] == False]  # noqa: E712 - None = market without a window
@@ -149,6 +152,10 @@ def insights(ds, cur, prev, ctry) -> list:
             v, p_ = tc.get(k), tp.get(k)
             if is_missing(v) or is_missing(p_):
                 continue
+            if p_ - v >= sev_up:
+                out.append(Insight("positive", "Operations", f"{ALL_KPIS[k].label} down {fmt_delta(k, v - p_)} vs {pl}",
+                                   f"{ALL_KPIS[k].label} {fmt(k, v)} vs {fmt(k, p_)} in {pl}.", basis=basis,
+                                   weight=(p_ - v) * 100))
             if v - p_ >= sev_up:
                 out.append(Insight("warning", "Operations", f"{ALL_KPIS[k].label} up {fmt_delta(k, v - p_)} vs {pl}",
                                    f"{ALL_KPIS[k].label} {fmt(k, v)} vs {fmt(k, p_)} in {pl}.",
@@ -295,7 +302,7 @@ def performance() -> None:
     with c2:
         cmp_df = compare_table(ds, cur, prev, ctry)
         if prev:
-            st.plotly_chart(CH.change_bars(cmp_df[cmp_df["key"] != "l_markets"], f"Change vs {pl} (green = better, red = worse)"),
+            st.plotly_chart(CH.change_bars(cmp_df[cmp_df["key"].isin(CHART_KEYS)], f"Change vs {pl} (green = better, red = worse)"),
                             use_container_width=True, config=PLOT_CFG)
         elif not hist.empty:
             st.plotly_chart(CH.trend_line(hist, "period", "l_delivery", "Delivery rate by month", T["l_delivery"]),

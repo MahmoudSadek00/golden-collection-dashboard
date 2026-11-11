@@ -17,6 +17,7 @@ import theme as TH
 
 SECTIONS = ["Executive Summary", "KPI Performance", "Period Comparison", "Team Performance",
             "Individual Performance", "Detailed Data", "Insights & Actions"]
+LOGI_SECTIONS = ["Logistics Summary", "Logistics Markets", "Logistics Trend", "Logistics Insights"]
 
 NUMFMT = {"pct": "0.0%", "ratio": "0%", "min": "0.0", "hrs": "0.0", "sec": "#,##0", "days": "0.00", "count": "#,##0",
           "pts": "0.0", "num": "0.0"}
@@ -152,8 +153,10 @@ def _valid_keys(ds, p):
     return keys
 
 
-def build(ds, f, sections: list | None = None, agent: str | None = None) -> bytes:
-    sections = sections or SECTIONS
+def build(ds, f, sections: list | None = None, agent: str | None = None, logi_sections: list | None = None) -> bytes:
+    """CS sheets (sections) and/or Logistics sheets (logi_sections), one workbook."""
+    sections = SECTIONS if sections is None else sections
+    logi_sections = logi_sections or []
     cur, prev = f.period, f.compare
     if prev is None and "Period Comparison" in sections:
         sections = [s for s in sections if s != "Period Comparison"]
@@ -505,6 +508,8 @@ def build(ds, f, sections: list | None = None, agent: str | None = None) -> byte
             ws.set_row(r, 15 * max(2, min(8, max(len(str(x["What happened"])) // 60, len(str(x["Recommended action"])) // 50) + 1)))
         ws.freeze_panes(r0 + 1, 0)
         ws.autofilter(r0, 0, r, len(hdr) - 1)
+    if logi_sections:
+        _logistics(B, ds, f, logi_sections)
     return B.close()
 
 
@@ -544,3 +549,144 @@ def _kpi_rows(B: Book, ws, r: int, df: pd.DataFrame, keys: list, definition=Fals
                 else:
                     ws.write_number(rr, j, float(v), B.num(u))
     return r + len(df) + 2
+
+
+# ------------------------------------------------------------------------------------------------ Logistics
+def _logistics(B: Book, ds, f, sections: list) -> None:
+    import logi as L
+    import logistics as LP
+    if not L.has_data(ds):
+        ws = B.sheet("Logistics", {0: 90})
+        B.heading(ws, "Logistics", "No logistics data available", 4)
+        ws.write(5, 0, "The Logistics_Daily tab of the Orders sheet could not be read.", B.f["muted"])
+        return
+    cur, prev = f.period, f.compare
+    T = L.targets()
+    cov = L.coverage(ds, cur)
+    _, l_to = L.data_range(ds)
+    meta = (f"{cur.short() if cur.kind != 'Month' else cur.start.strftime('%B %Y')}"
+            + (f" compared with {prev.short()}" if prev else "") + f"  |  Orders to {l_to:%d %b %Y}  |  All markets")
+    cmp_df = LP.compare_table(ds, cur, prev, None)
+    items = LP.insights(ds, cur, prev, None)
+    notes = [n for n in (cov.get("note"), cov.get("maturity_note")) if n]
+
+    if "Logistics Summary" in sections:
+        ws = B.sheet("Logistics Summary", {0: 30, 1: 14, 2: 14, 3: 14, 4: 14, 5: 14, 6: 16, 7: 16})
+        r = B.heading(ws, "Logistics Performance Report", meta, 8)
+        ws.write(r, 0, "Prepared", B.f["label"])
+        ws.write(r, 1, datetime.now().strftime("%d %b %Y"), B.f["text"])
+        r += 2
+        s = L.scorecard(ds, cur) if cur.scored else {}
+        if s and not is_missing(s.get("l_score")):
+            sp = L.scorecard(ds, prev) if prev and prev.scored else {}
+            ws.write(r, 0, "Logistics KPI score", B.f["big_lbl"])
+            ws.write(r, 2, "Target", B.f["big_lbl"])
+            ws.write(r, 4, "Targets hit", B.f["big_lbl"])
+            if sp and not is_missing(sp.get("l_score")):
+                ws.write(r, 6, f"vs {prev.short()}", B.f["big_lbl"])
+            ws.write_number(r + 1, 0, round(s["l_score"], 1), B.wb.add_format(
+                {"font_size": 26, "bold": True, "num_format": "0.0",
+                 "font_color": TH.GOOD_TEXT if s["l_score"] >= s["target"] else "#A12B2B"}))
+            ws.write_number(r + 1, 2, s["target"], B.f["big"])
+            ws.write(r + 1, 4, f"{sum(s['hit'].values())} / 3", B.f["big"])
+            if sp and not is_missing(sp.get("l_score")):
+                ws.write(r + 1, 6, f"{s['l_score'] - sp['l_score']:+.1f}", B.f["big"])
+            ws.set_row(r + 1, 34)
+            r += 3
+            ws.write(r, 0, "Score composition", B.f["section"])
+            r += 1
+            comp = pd.DataFrame([
+                {"KPI": "Delivery rate", "Actual": s["l_delivery"], "0 points at": 0.85, "Full points at": 0.95,
+                 "Points": s["pts"]["delivery"], "Out of": 40, "Target hit": "Yes" if s["hit"]["delivery"] else "No"},
+                {"KPI": "On-time delivery", "Actual": s["l_ontime"], "0 points at": 0.85, "Full points at": 0.95,
+                 "Points": s["pts"]["ontime"], "Out of": 40, "Target hit": "Yes" if s["hit"]["ontime"] else "No"},
+                {"KPI": "Markets within window", "Actual": s["l_markets"], "0 points at": 0.60, "Full points at": 1.0,
+                 "Points": s["pts"]["markets"], "Out of": 20, "Target hit": "Yes" if s["hit"]["markets"] else "No"}])
+            r = B.table(ws, r, 0, comp, units={"Actual": "pct", "0 points at": "ratio", "Full points at": "ratio",
+                                                "Points": "pts", "Out of": "count"}, status_cols=("Target hit",))
+        ws.write(r, 0, "Headline KPIs", B.f["section"])
+        r += 1
+        keys = list(cmp_df["key"])
+        df = pd.DataFrame({"KPI": cmp_df["KPI"], "Actual": cmp_df["current"], "Target": cmp_df["target"],
+                           "Previous": cmp_df["previous"], "Change": cmp_df["change"],
+                           "Trend": [_trend_word(t) for t in cmp_df["trend"]],
+                           "Status": [_status(k, v, t) if not is_missing(t) else "–"
+                                      for k, v, t in zip(cmp_df["key"], cmp_df["current"], cmp_df["target"])]})
+        r = _kpi_rows(B, ws, r, df, keys)
+        ws.write(r, 0, "Key findings", B.f["section"])
+        r += 1
+        top = [i for i in items if i.severity in ("critical", "warning")][:5] + [i for i in items if i.severity == "positive"][:3]
+        for i in top:
+            fm = B.f["bad"] if i.severity in ("critical", "warning") else B.f["good"]
+            ws.write(r, 0, {"critical": "Priority", "warning": "Attention", "positive": "Positive"}.get(i.severity, "Note"), fm)
+            ws.merge_range(r, 1, r, 7, f"{i.title}. {i.what}" + (f" Action: {i.action}" if i.action else ""), B.f["cell_wrap"])
+            ws.set_row(r, 15 * max(2, min(6, len(i.what + i.action) // 95 + 1)))
+            r += 1
+        if notes:
+            r += 1
+            ws.write(r, 0, "Data notes", B.f["section"])
+            r += 1
+            for n in notes:
+                ws.merge_range(r, 0, r, 7, n + ".", B.f["muted"])
+                ws.set_row(r, 28)
+                r += 1
+
+    if "Logistics Markets" in sections:
+        ws = B.sheet("Logistics Markets", {0: 16, **{c: 12 for c in range(1, 15)}})
+        r = B.heading(ws, "Logistics by Market", meta, 15)
+        bc = L.by_country(ds, cur)
+        bc = bc[bc["l_orders"] > 0]
+        m = LP._market_table(bc)
+        if not m.empty:
+            m["Within window"] = m["Within window"].str.replace("● ", "").str.replace("▲ ", "")
+            for c in ("Delivery rate %", "On-time %", "Return rate %", "Cancellation rate %"):
+                m[c] = m[c] / 100
+            m = m.rename(columns={"Delivery rate %": "Delivery rate", "On-time %": "On-time", "Return rate %": "Return rate",
+                                  "Cancellation rate %": "Cancellation rate"})
+            r = B.table(ws, r, 0, m, units={"Orders": "count", "Shipped": "count", "Delivered": "count", "Returned": "count",
+                                             "In transit": "count", "Delivery rate": "pct", "On-time": "pct",
+                                             "Return rate": "pct", "Cancellation rate": "pct", "Avg delivery days": "days",
+                                             "Window (days)": "count", "Order to ship days": "days",
+                                             "Delivered value USD": "count"}, status_cols=("Within window",))
+        ws.write(r, 0, "Iraq has no agreed delivery window, so it is not one of the 5 scored markets.", B.f["muted"])
+
+    if "Logistics Trend" in sections:
+        ws = B.sheet("Logistics Trend", {0: 14, **{c: 12 for c in range(1, 12)}})
+        r = B.heading(ws, "Logistics Trend", meta, 12)
+        f_from, f_to = L.data_range(ds)
+        import periods as P
+        months = [p for p in P.available("Month", f_from, f_to) if p.start <= cur.end][:12][::-1]
+        ms = L.month_scores(ds, months)
+        mt = L.series(ds, months[0].start, cur.end, "M") if months else pd.DataFrame()
+        if not mt.empty:
+            ws.write(r, 0, "Monthly (last 12 months)", B.f["section"])
+            r += 1
+            d = pd.DataFrame({"Month": mt["period"].dt.strftime("%Y-%m"), "Orders": mt["l_orders"], "Shipped": mt["l_shipped"],
+                              "Delivered": mt["l_delivered"], "Delivery rate": mt["l_delivery"], "On-time": mt["l_ontime"],
+                              "Return rate": mt["l_return_rate"], "Cancellation rate": mt["l_cancel_rate"],
+                              "Avg delivery days": mt["l_dlv_days"], "Order to ship days": mt["l_lead_days"]})
+            if not ms.empty:
+                d = d.merge(ms[["period", "l_score"]].rename(columns={"period": "Month", "l_score": "KPI score"}), how="left")
+            r = B.table(ws, r, 0, d, units={"Orders": "count", "Shipped": "count", "Delivered": "count", "Delivery rate": "pct",
+                                             "On-time": "pct", "Return rate": "pct", "Cancellation rate": "pct",
+                                             "Avg delivery days": "days", "Order to ship days": "days", "KPI score": "pts"})
+        dd = L.series(ds, cur.start, cur.end, "D")
+        if not dd.empty:
+            ws.write(r, 0, f"Daily ({cur.short()})", B.f["section"])
+            r += 1
+            d = pd.DataFrame({"Date": dd["period"].dt.strftime("%Y-%m-%d"), "Orders": dd["l_orders"], "Shipped": dd["l_shipped"],
+                              "Delivered": dd["l_delivered"], "Returned": dd["l_returned"], "In transit": dd["l_transit"],
+                              "Delivery rate": dd["l_delivery"], "On-time": dd["l_ontime"],
+                              "Avg delivery days": dd["l_dlv_days"], "Order to ship days": dd["l_lead_days"]})
+            B.table(ws, r, 0, d, units={"Orders": "count", "Shipped": "count", "Delivered": "count", "Returned": "count",
+                                         "In transit": "count", "Delivery rate": "pct", "On-time": "pct",
+                                         "Avg delivery days": "days", "Order to ship days": "days"}, autofilter=True)
+
+    if "Logistics Insights" in sections:
+        ws = B.sheet("Logistics Insights", {0: 11, 1: 12, 2: 38, 3: 60, 4: 45, 5: 45, 6: 14})
+        r = B.heading(ws, "Logistics Insights & Actions", meta, 7)
+        if items:
+            d = pd.DataFrame([i.as_row() for i in items])
+            B.table(ws, r, 0, d, wrap_cols=("Finding", "What happened", "Why it matters", "Recommended action"))
+        else:
+            ws.write(r, 0, "No findings for this period.", B.f["muted"])

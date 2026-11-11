@@ -7,6 +7,7 @@ import pandas as pd
 import streamlit as st
 
 import analytics as an
+import logi as L
 import periods as P
 from prepare import Dataset
 
@@ -35,6 +36,15 @@ class Filters:
                 "Group": self.group, "Agents": ", ".join(self.agent_choice) if self.agent_choice else "All agents"}
 
 
+def _range(ds: Dataset):
+    """Periods offered = CS data range plus the logistics history (2025 orders onwards)."""
+    f_from, f_to = an.data_range(ds)
+    l_from, l_to = L.data_range(ds)
+    fr = min([d for d in (f_from, l_from) if not pd.isna(d)], default=pd.NaT)
+    to = max([d for d in (f_to, l_to) if not pd.isna(d)], default=pd.NaT)
+    return fr, to
+
+
 def _default_period(ds: Dataset, kind: str, options: list):
     f, t = an.data_range(ds)
     for p in options:
@@ -56,7 +66,7 @@ def reset() -> None:
 def sidebar(ds: Dataset) -> Filters:
     for k, v in DEFAULTS.items():
         st.session_state.setdefault(k, v)
-    f_from, f_to = an.data_range(ds)
+    f_from, f_to = _range(ds)
     st.sidebar.markdown('<div style="font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:#8C9AB8;'
                         'margin:.4rem 0 .2rem 0">Filters</div>', unsafe_allow_html=True)
     kind = st.sidebar.selectbox("Period type", P.KINDS, key="f_kind")
@@ -129,6 +139,6 @@ def sidebar(ds: Dataset) -> Filters:
 def _nice(p: P.Period, ds: Dataset) -> str:
     c = an.coverage(ds, p)
     base = P.month_label_long(p) if p.kind == "Month" else p.short()
-    if not c["complete"]:
-        return f"{base} (partial)"
-    return base
+    if c["complete"] or L.coverage(ds, p).get("complete"):
+        return base
+    return f"{base} (partial)"

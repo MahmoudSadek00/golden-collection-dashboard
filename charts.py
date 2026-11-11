@@ -38,7 +38,13 @@ def trend_line(df: pd.DataFrame, x: str, key: str, title: str, target=None, seri
                compare: pd.DataFrame | None = None, height: int = 300) -> go.Figure:
     s = _scale(key)
     fig = go.Figure()
-    d = df[df[key].notna()] if key in df else df.iloc[0:0]
+    if df is None or x not in df or key not in df or df[key].notna().sum() == 0:
+        fig.add_annotation(text="No data for this selection", showarrow=False, font=dict(color=T.MUTED, size=12),
+                           xref="paper", yref="paper", x=0.5, y=0.5)
+        fig.update_xaxes(visible=False)
+        fig.update_yaxes(visible=False)
+        return base(fig, title, height)
+    d = df[df[key].notna()]
     fig.add_trace(go.Scatter(x=d[x], y=d[key] * s, mode="lines+markers", name=series_label,
                              line=dict(color=T.PRIMARY_SERIES, width=2.2), marker=dict(size=8, line=dict(color="#fff", width=2)),
                              hovertemplate=f"%{{x}}<br>{ALL_KPIS[key].label}: %{{y:.2f}}{_suffix(key)}<extra></extra>"))

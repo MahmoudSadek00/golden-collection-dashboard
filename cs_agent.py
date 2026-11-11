@@ -132,7 +132,7 @@ def page() -> None:
         night = k == "calls" and bool(r.get("night"))
         rows.append({"KPI": ALL_KPIS[k].label, "Actual": fmt(k, v), "Target": fmt(k, t),
                      "Gap": fmt_delta(k, gap(k, v, t)),
-                     "Team": fmt(k, team.get(k)) if k != "sales" else "100%",
+                     "Team": fmt(k, team.get(k)) if k != "sales" else "—",
                      "Agent average": fmt(k, A_all[k].mean()) if k in A_all else "—",
                      "Previous": fmt(k, p_), "Change": fmt_delta(k, v - p_) if not (is_missing(v) or is_missing(p_)) else "—",
                      "Trend": C.trend_text(trend(k, v, p_)),
@@ -152,16 +152,22 @@ def page() -> None:
         if not is_missing(a):
             ach[k] = a
     if ach:
-        s = sorted(ach.items(), key=lambda x: -x[1])
+        # strongest = KPIs on target (best first); weakest = KPIs below target (worst first). A KPI is never in both.
+        met = {k: target_met(k, r.get(k), T.get(k)) for k in ach}
+        strong = sorted([k for k in ach if met[k]], key=lambda k: -ach[k])[:3]
+        weak = sorted([k for k in ach if met[k] is False], key=lambda k: ach[k])[:3]
+
+        def line(k):
+            return f"- **{ALL_KPIS[k].label}**: {fmt(k, r[k])} ({ach[k] * 100:.0f}% of target {fmt(k, T[k])})"
         c1, c2 = st.columns(2, gap="medium")
         with c1:
-            C.section("Strongest areas")
-            for k, a in s[:3]:
-                st.markdown(f"- **{ALL_KPIS[k].label}**: {fmt(k, r[k])} ({a * 100:.0f}% of target {fmt(k, T[k])})")
+            C.section("Strongest areas", "KPIs on target, best first.")
+            st.markdown("\n".join(line(k) for k in strong) if strong else "No KPI on target in this period.")
         with c2:
-            C.section("Weakest areas")
-            for k, a in list(reversed(s))[:3]:
-                st.markdown(f"- **{ALL_KPIS[k].label}**: {fmt(k, r[k])} ({a * 100:.0f}% of target {fmt(k, T[k])})")
+            C.section("Weakest areas", "KPIs below target, furthest from target first.")
+            st.markdown("\n".join(line(k) for k in weak) if weak else "All measured KPIs are on target.")
+        if r.get("qa_missing") and cur.scored:
+            st.caption("Quality is not listed: no QA score was entered for this period.")
 
     # ---------------------------------------------------------------- charts
     c1, c2 = st.columns(2, gap="medium")

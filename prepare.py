@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from config import KPI_DEFAULTS, KPI_SHEET_NAMES, LOGI_COLUMNS, REQUIRED_COLUMNS
+from config import KPI_DEFAULTS, KPI_SHEET_NAMES, LOGI_CFG, LOGI_COLUMNS, REQUIRED_COLUMNS
 from data_loader import RawData
 
 _DT_RE = r"^\s*(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?"
@@ -282,6 +282,10 @@ def prepare(raw: RawData) -> Dataset:
                             f"{coverage['chats_to']:%d %b %Y}. Per-working-day KPIs and the KPI score are not shown "
                             "for days without a schedule."))
     logi = _logi(F.get("logi"), issues)
+    old = _logi_from_orders(F.get("logi_2025"), issues)
+    if not old.empty:
+        first = logi["date"].min() if not logi.empty else pd.Timestamp.max
+        logi = pd.concat([old[old["date"] < first], logi], ignore_index=True)
     coverage["logi_from"] = logi["date"].min() if not logi.empty else pd.NaT
     coverage["logi_to"] = logi["date"].max() if not logi.empty else pd.NaT
     return Dataset(logi=logi, chats=chats, daily=daily, calls=calls, orders=orders, qa=qa, kpi_agents=kpi_agents,
@@ -345,3 +349,56 @@ def _logi(df: pd.DataFrame | None, issues: list) -> pd.DataFrame:
     num_cols = [c for c in cols if c not in ("date", "country")]
     out[num_cols] = out[num_cols].fillna(0.0)
     return out.reset_index(drop=True)
+
+
+_US_DATE = r"^\s*(\d{1,2})/(\d{1,2})/(\d{4})"
+
+
+def _any_date(s: pd.Series) -> pd.Series:
+    """'yyyy-mm-dd' or 'm/d/yyyy' text (both appear in the order tabs)."""
+    d = parse_dt(s).dt.normalize()
+    us = s.astype(str).str.extract(_US_DATE).apply(pd.to_numeric, errors="coerce")
+    alt = pd.to_datetime(dict(year=us[2], month=us[0], day=us[1]), errors="coerce")
+    return d.fillna(alt)
+
+
+def _logi_from_orders(df: pd.DataFrame | None, issues: list) -> pd.DataFrame:
+    """2025 orders (tab '2025 All Orders', Combined layout) rolled up to Logistics_Daily rows with the OpsPulse_Model
+    rules: shipped = has a shipping date; delivery days = shipping -> delivery date for delivered orders (negative gaps
+    excluded); on time = delivery days within the market window; order -> ship days over orders with both dates.
+    Rows of the same order number keep the shipped (Orders) row over the Shopify (unshipped) one."""
+    cols = list(LOGI_RENAME.values())
+    if df is None or df.empty:
+        return pd.DataFrame(columns=cols)
+    o = pd.DataFrame({"src": clean(_col(df, "Source")), "ref": clean(_col(df, "Reference Number")),
+                      "od": _any_date(_col(df, "Order Date")), "sd": _any_date(_col(df, "Shipping Date")),
+                      "dd": _any_date(_col(df, "Delivery Date")), "country": clean(_col(df, "Country")).str.upper(),
+                      "status": clean(_col(df, "Status")), "usd": num(_col(df, "Order Value (USD)")).fillna(0.0),
+                      "new": num(_col(df, "New Customer Orders")).fillna(0.0),
+                      "ret": num(_col(df, "Returning Customer Orders")).fillna(0.0)})
+    o["unshipped"] = o["src"].str.contains("unshipped", case=False)
+    o = o[(o["ref"] != "") & o["od"].notna()]
+    o = o.sort_values("unshipped", kind="stable").drop_duplicates("ref", keep="first")
+    sh = o["sd"].notna()
+    st_ = o["status"]
+    gap = (o["dd"] - o["sd"]).dt.days
+    dvalid = (st_ == "Delivered") & sh & o["dd"].notna() & (gap >= 0)
+    win = o["country"].map(LOGI_CFG["windows"])
+    lead = (o["sd"] - o["od"]).dt.days
+    lvalid = sh & (lead >= 0)
+    f = pd.DataFrame({
+        "date": o["od"], "country": o["country"].replace("", "Unknown"), "orders": 1.0,
+        "delivered_all": (st_ == "Delivered").astype(float), "returned_all": (st_ == "Returned").astype(float),
+        "pending_all": (st_ == "Pending").astype(float), "cancelled": (st_ == "Cancelled").astype(float),
+        "not_shipped": o["unshipped"].astype(float), "shipped": sh.astype(float),
+        "delivered": (sh & (st_ == "Delivered")).astype(float), "returned": (sh & (st_ == "Returned")).astype(float),
+        "in_transit": (sh & (st_ == "Pending")).astype(float), "value_usd": o["usd"],
+        "delivered_usd": o["usd"].where(st_ == "Delivered", 0.0), "returned_usd": o["usd"].where(st_ == "Returned", 0.0),
+        "refund_usd": 0.0, "lead_sum": lead.where(lvalid, 0).astype(float), "lead_n": lvalid.astype(float),
+        "dlv_sum": gap.where(dvalid, 0).astype(float), "dlv_n": dvalid.astype(float),
+        "eligible": (dvalid & win.notna()).astype(float), "on_time": (dvalid & win.notna() & (gap <= win)).astype(float),
+        "new_cust": o["new"], "ret_cust": o["ret"]})
+    out = f.groupby(["date", "country"], as_index=False).sum()
+    issues.append(Issue("info", "2025 All Orders", f"{len(o):,} orders from {o['od'].min():%d %b %Y} to "
+                        f"{o['od'].max():%d %b %Y} added to the logistics history (same rules as OpsPulse_Model)"))
+    return out[cols]

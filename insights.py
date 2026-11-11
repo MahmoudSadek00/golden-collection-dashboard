@@ -115,7 +115,7 @@ def generate(ds: Dataset, cur: Period, prev: Period, agents: list | None = None)
             weight=abs(T["score"] - s["current"])))
 
     # ---------------------------------------------------------------- KPIs vs target (team level)
-    flagged = set()
+    flagged = {"score"}            # the score already has its own finding above
     for k in ["quality", "chats", "calls", "reply", "absence", "fcr"]:
         if k not in tc.index:
             continue
@@ -148,7 +148,7 @@ def generate(ds: Dataset, cur: Period, prev: Period, agents: list | None = None)
         k = r["key"]
         good = r["trend"] == "improved"
         out.append(Insight("positive" if good else "warning", "Operations" if r["family"] == "Operations" else "KPI",
-                           f"{r['KPI']} {'improved' if good else 'deteriorated'} {abs(r['change_pct']) * 100:.0f}% vs {prev.short()}",
+                           f"{r['KPI']} {'improved' if good else 'worse'}: {fmt_delta(k, r['change'])} vs {prev.short()}",
                            f"{r['KPI']}: {fmt(k, r['current'])} in {cur.short()} vs {fmt(k, r['previous'])} in "
                            f"{prev.short()} ({fmt_delta(k, r['change'])}).",
                            WHY.get(k, "") if not good else "",

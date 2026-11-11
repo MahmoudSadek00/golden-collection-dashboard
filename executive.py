@@ -82,7 +82,7 @@ def page() -> None:
     hist = an.month_series(ds, months, f.agents)
     c1, c2 = st.columns(2, gap="medium")
     with c1:
-        if hist["score"].notna().any():
+        if "score" in hist and hist["score"].notna().any():
             st.plotly_chart(CH.trend_line(hist, "period", "score", "Team KPI score by month", T["score"]),
                             use_container_width=True, config={"displayModeBar": False})
         else:
