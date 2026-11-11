@@ -14,6 +14,7 @@ sheet displays it; typing happens in core.prepare.
 from __future__ import annotations
 
 import io
+import json
 import os
 import time
 from dataclasses import dataclass, field
@@ -22,6 +23,9 @@ from datetime import datetime, timezone
 import pandas as pd
 
 from config import CS_TABS, LARGE_TABS, ORDERS_TAB, REQUIRED_COLUMNS
+
+DEFAULT_CS_ID = "1d1_4RJtoG8EudFWDrzmS_5oWTUAxzI7aQ5GOX2fGtBo"       # TEST copy until the real sheet is upgraded
+DEFAULT_ORDERS_ID = "1dZMqtqvnxe6GspH0C10AvXECB74NP-ZjDG_BihMOkmg"
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly",
           "https://www.googleapis.com/auth/drive.readonly"]
@@ -145,7 +149,15 @@ def load_raw(secrets) -> RawData:
     folder = os.environ.get("GC_DATA_DIR") or (secrets.get("local", {}).get("data_dir") if secrets else None)
     if folder:
         return load_local(folder)
-    if not secrets or "gcp_service_account" not in secrets:
+    sa = None
+    if secrets and "gcp_service_account" in secrets:
+        sa = dict(secrets["gcp_service_account"])
+    elif secrets and "gcp_service_account_json" in secrets:      # same key, pasted as one JSON text
+        raw = secrets["gcp_service_account_json"]
+        sa = json.loads(raw) if isinstance(raw, str) else dict(raw)
+    if not sa:
         raise RuntimeError("No data source configured. Add the service account and sheet IDs to the app secrets.")
-    sh = secrets.get("sheets", {})
-    return load_google(dict(secrets["gcp_service_account"]), sh["cs_spreadsheet_id"], sh["orders_spreadsheet_id"])
+    sh = secrets.get("sheets", {}) or {}
+    cs_id = sh.get("cs_spreadsheet_id") or secrets.get("cs_spreadsheet_id") or DEFAULT_CS_ID
+    orders_id = sh.get("orders_spreadsheet_id") or secrets.get("orders_spreadsheet_id") or DEFAULT_ORDERS_ID
+    return load_google(sa, cs_id, orders_id)
