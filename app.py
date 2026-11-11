@@ -37,7 +37,11 @@ def main() -> None:
             st.Page(cs_comparison.page, title="Period Comparison", icon=":material/compare_arrows:", url_path="cs-compare"),
             st.Page(cs_operations.page, title="Operations", icon=":material/support_agent:", url_path="cs-operations"),
         ],
-        "Logistics": [st.Page(logistics.page, title="Logistics", icon=":material/local_shipping:", url_path="logistics")],
+        "Logistics": [
+            st.Page(logistics.performance, title="Performance", icon=":material/local_shipping:", url_path="logistics"),
+            st.Page(logistics.markets, title="Markets", icon=":material/public:", url_path="logistics-markets"),
+            st.Page(logistics.trends, title="Trends", icon=":material/timeline:", url_path="logistics-trends"),
+        ],
         "Reports & Exports": [
             st.Page(reports.page, title="Report Builder", icon=":material/description:", url_path="reports"),
             st.Page(data_health.page, title="Data Health", icon=":material/fact_check:", url_path="data-health"),

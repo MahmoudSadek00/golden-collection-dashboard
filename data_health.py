@@ -35,6 +35,8 @@ def page() -> None:
             ("CS_Agent_Daily", "Schedule, working days, adherence", _d(cv["daily_from"]), _d(cv["schedule_to"]), f"{len(ds.daily):,}"),
             ("CS_Calls", "Inbound calls", _d(cv["calls_from"]), _d(cv["calls_to"]), f"{len(ds.calls):,}"),
             ("Agent_Orders", "Delivered sales by agent", _d(cv["orders_from"]), _d(cv["orders_to"]), f"{len(ds.orders):,}"),
+            ("Logistics_Daily", "Orders, shipping and delivery by day and market (Orders sheet)", _d(cv.get("logi_from")),
+             _d(cv.get("logi_to")), f"{len(ds.logi):,}"),
             ("QA_Input", "Monthly quality scores", (cv["qa_months"] or ["—"])[0], (cv["qa_months"] or ["—"])[-1],
              f"{len(ds.qa):,}")]
     C.section("Source coverage")

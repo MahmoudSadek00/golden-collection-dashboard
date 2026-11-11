@@ -77,7 +77,44 @@ OPS_KPIS = {
     "shrinkage": KPI("shrinkage", "Shrinkage", "pct", "lower", "ops",
                      "Break, coaching, training and technical minutes ÷ planned minutes.", 1),
 }
-ALL_KPIS = {**SCORE_KPIS, **OPS_KPIS}
+LOGI_KPIS = {
+    "l_score": KPI("l_score", "Logistics KPI Score", "pts", "higher", "logi",
+                   "Delivery rate 40 pts + On-time delivery 40 pts + Markets within window 20 pts (bonus calculator). "
+                   "CSAT and packaging carry 0 points until measured. Team target 90.", 1),
+    "l_delivery": KPI("l_delivery", "Delivery Rate", "pct", "higher", "logi",
+                      "Delivered ÷ shipped orders, by order date. Shipped = delivered + returned + in transit + cancelled "
+                      "after shipping. Points: 85% = 0, 95% = 40.", 1),
+    "l_ontime": KPI("l_ontime", "On-time Delivery", "pct", "higher", "logi",
+                    "Delivered orders that arrived within their market's window ÷ delivered orders with a delivery date. "
+                    "Points: 85% = 0, 95% = 40.", 1),
+    "l_markets": KPI("l_markets", "Markets within Window", "ratio", "higher", "logi",
+                     "Markets whose average delivery days are within the window (UAE 3, SA 7, QA 7, KW 12, OM 10) ÷ 5. "
+                     "Points: 60% = 0, 100% = 20.", 0),
+    "l_orders": KPI("l_orders", "Orders", "count", "neutral", "logi", "Orders placed in the period (order date).", 0),
+    "l_shipped": KPI("l_shipped", "Shipped Orders", "count", "neutral", "logi",
+                     "Orders handed to the shipping company.", 0),
+    "l_delivered": KPI("l_delivered", "Delivered", "count", "higher", "logi", "Shipped orders delivered.", 0),
+    "l_returned": KPI("l_returned", "Returned", "count", "lower", "logi", "Shipped orders returned.", 0),
+    "l_transit": KPI("l_transit", "In Transit", "count", "neutral", "logi", "Shipped orders not yet delivered or returned.", 0),
+    "l_cancel_after": KPI("l_cancel_after", "Cancelled after Shipping", "count", "lower", "logi",
+                          "Shipped − delivered − returned − in transit.", 0),
+    "l_cancelled": KPI("l_cancelled", "Cancelled", "count", "lower", "logi", "Orders with status Cancelled.", 0),
+    "l_not_shipped": KPI("l_not_shipped", "Not Shipped", "count", "neutral", "logi",
+                         "Orders that never reached the shipping company (cancelled or pending before shipping).", 0),
+    "l_return_rate": KPI("l_return_rate", "Return Rate", "pct", "lower", "logi", "Returned ÷ shipped orders.", 1),
+    "l_transit_rate": KPI("l_transit_rate", "Still in Transit", "pct", "neutral", "logi", "In transit ÷ shipped orders.", 1),
+    "l_cancel_rate": KPI("l_cancel_rate", "Cancellation Rate", "pct", "lower", "logi", "Cancelled ÷ orders.", 1),
+    "l_dlv_days": KPI("l_dlv_days", "Average Delivery Time", "days", "lower", "logi",
+                      "Average days from shipping to delivery (orders with a valid delivery date).", 2),
+    "l_lead_days": KPI("l_lead_days", "Order to Ship Time", "days", "lower", "logi",
+                       "Average days from order to shipping (orders with a valid shipping date).", 2),
+    "l_value": KPI("l_value", "Order Value (USD)", "count", "neutral", "logi", "Total order value converted to USD.", 0),
+    "l_delivered_value": KPI("l_delivered_value", "Delivered Value (USD)", "count", "higher", "logi",
+                             "Value of delivered orders in USD.", 0),
+    "l_new_share": KPI("l_new_share", "New Customers", "pct", "neutral", "logi",
+                       "New-customer orders ÷ (new + returning customer orders).", 1),
+}
+ALL_KPIS = {**SCORE_KPIS, **OPS_KPIS, **LOGI_KPIS}
 
 
 def is_missing(v) -> bool:

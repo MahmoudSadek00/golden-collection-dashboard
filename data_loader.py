@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from config import CS_TABS, LARGE_TABS, ORDERS_TAB, REQUIRED_COLUMNS
+from config import CS_TABS, LARGE_TABS, LOGI_TAB, ORDERS_TAB, REQUIRED_COLUMNS
 
 DEFAULT_CS_ID = "1d1_4RJtoG8EudFWDrzmS_5oWTUAxzI7aQ5GOX2fGtBo"       # TEST copy until the real sheet is upgraded
 DEFAULT_ORDERS_ID = "1dZMqtqvnxe6GspH0C10AvXECB74NP-ZjDG_BihMOkmg"
@@ -56,6 +56,7 @@ def load_local(folder: str) -> RawData:
     out = RawData(source=f"Local files ({folder})")
     wanted = dict(CS_TABS)
     wanted["orders"] = ORDERS_TAB
+    wanted["logi"] = LOGI_TAB
     for key, tab in wanted.items():
         path = os.path.join(folder, tab.replace(" ", "_") + ".csv")
         if os.path.exists(path):
@@ -138,6 +139,10 @@ def load_google(sa_info: dict, cs_id: str, orders_id: str) -> RawData:
             out.frames["orders"] = _export_csv(sess, orders_id, o_ids[ORDERS_TAB])
         else:
             out.missing.append(ORDERS_TAB)
+        if LOGI_TAB in o_ids:
+            out.frames["logi"] = _values_batch(sess, orders_id, [LOGI_TAB]).get(LOGI_TAB, pd.DataFrame())
+        else:
+            out.missing.append(LOGI_TAB)
     except Exception:  # noqa: BLE001 - reported as missing, never silently zero-filled
         out.missing.append(ORDERS_TAB)
     out.loaded_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")

@@ -43,6 +43,7 @@ REQUIRED_COLUMNS = {
     "kpi_agents": ["Agent", "In KPI score"],
     "qa": ["Agent", "Month (first day)", "QA score"],
     "kpi_targets": ["KPI", "Points in score", "Target"],
+    "logi": ["Date", "Country", "Orders", "Shipped", "Shipped Delivered", "Target Eligible", "Delivered Within Target"],
 }
 
 # --------------------------------------------------------------------------------------------------------------
@@ -77,3 +78,26 @@ KPI_DEFAULTS = {
 }
 
 FROZEN_PERIODS = {"2026 Q3"}           # scores for these periods come from KPI_Frozen_Q3, never recalculated
+
+# --------------------------------------------------------------------------------------------------------------
+# Logistics (Orders - Clean Data spreadsheet, tab Logistics_Daily = QUERY over OpsPulse_Model, one row per day x country)
+# Rules from the "CS & Logistics Bonus Calculator" (Logistics KPIs tab). Logistics is scored as one team.
+# --------------------------------------------------------------------------------------------------------------
+LOGI_TAB = "Logistics_Daily"
+LOGI_COLUMNS = ["Date", "Country", "Orders", "Delivered", "Returned", "Pending", "Cancelled", "Not Shipped", "Shipped",
+                "Shipped Delivered", "Shipped Returned", "Shipped Pending", "Order Value USD", "Delivered Value USD",
+                "Returned Value USD", "Refund USD", "Lead Days Sum", "Lead Days Count", "Delivery Days Sum",
+                "Delivery Days Count", "Target Eligible", "Delivered Within Target", "New Customer Orders",
+                "Returning Customer Orders"]
+LOGI_CFG = {
+    # delivery window per market in days (OpsPulse_Settings "On-time target days" = workbook column "Max days")
+    "windows": {"UAE": 3, "SA": 7, "QA": 7, "KW": 12, "OM": 10},
+    "points": {"delivery": 40, "ontime": 40, "markets": 20},
+    "delivery": {"zero": 0.85, "full": 0.95},
+    "ontime": {"zero": 0.85, "full": 0.95},
+    "markets": {"zero": 0.60, "full": 1.00},
+    "teamTarget": 90,
+    "maturityDays": 14,          # orders younger than this are often still in transit (OpsPulse "maturity lag")
+}
+MARKET_NAMES = {"UAE": "UAE", "SA": "Saudi Arabia", "QA": "Qatar", "KW": "Kuwait", "OM": "Oman", "IQ": "Iraq",
+                "BH": "Bahrain"}

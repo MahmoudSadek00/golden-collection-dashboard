@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from config import KPI_DEFAULTS, KPI_SHEET_NAMES, REQUIRED_COLUMNS
+from config import KPI_DEFAULTS, KPI_SHEET_NAMES, LOGI_COLUMNS, REQUIRED_COLUMNS
 from data_loader import RawData
 
 _DT_RE = r"^\s*(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?"
@@ -72,6 +72,7 @@ class Dataset:
     max_started: pd.Timestamp
     coverage: dict
     issues: list = field(default_factory=list)
+    logi: pd.DataFrame = field(default_factory=pd.DataFrame)
     source: str = ""
     loaded_at: str = ""
 
@@ -280,7 +281,10 @@ def prepare(raw: RawData) -> Dataset:
                             f"Schedule entered only up to {coverage['schedule_to']:%d %b %Y}; chats run to "
                             f"{coverage['chats_to']:%d %b %Y}. Per-working-day KPIs and the KPI score are not shown "
                             "for days without a schedule."))
-    return Dataset(chats=chats, daily=daily, calls=calls, orders=orders, qa=qa, kpi_agents=kpi_agents,
+    logi = _logi(F.get("logi"), issues)
+    coverage["logi_from"] = logi["date"].min() if not logi.empty else pd.NaT
+    coverage["logi_to"] = logi["date"].max() if not logi.empty else pd.NaT
+    return Dataset(logi=logi, chats=chats, daily=daily, calls=calls, orders=orders, qa=qa, kpi_agents=kpi_agents,
                    agent_team=agent_team, cfg=cfg, fcr_topics=fcr_topics, sales_topics=sales_topics,
                    frozen_agents=frozen_agents, frozen_team=frozen_team,
                    ls_scorecard=F.get("ls_scorecard", pd.DataFrame()), ls_team=F.get("ls_team", pd.DataFrame()),
@@ -306,3 +310,38 @@ def _fcr_back(chats: pd.DataFrame, window_days: int) -> pd.Series:
     back = m["next_start"].notna() & (m["next_start"] <= m["resolved"] + win)
     out.loc[m["row"].values] = back.values
     return out
+
+
+LOGI_RENAME = {"Date": "date", "Country": "country", "Orders": "orders", "Delivered": "delivered_all", "Returned": "returned_all",
+               "Pending": "pending_all", "Cancelled": "cancelled", "Not Shipped": "not_shipped", "Shipped": "shipped",
+               "Shipped Delivered": "delivered", "Shipped Returned": "returned", "Shipped Pending": "in_transit",
+               "Order Value USD": "value_usd", "Delivered Value USD": "delivered_usd", "Returned Value USD": "returned_usd",
+               "Refund USD": "refund_usd", "Lead Days Sum": "lead_sum", "Lead Days Count": "lead_n",
+               "Delivery Days Sum": "dlv_sum", "Delivery Days Count": "dlv_n", "Target Eligible": "eligible",
+               "Delivered Within Target": "on_time", "New Customer Orders": "new_cust", "Returning Customer Orders": "ret_cust"}
+
+
+def _logi(df: pd.DataFrame | None, issues: list) -> pd.DataFrame:
+    """Logistics_Daily: one row per order date x country, summed from OpsPulse_Model (Orders - Clean Data)."""
+    cols = list(LOGI_RENAME.values())
+    if df is None:                       # already reported as "Tab not found"
+        return pd.DataFrame(columns=cols)
+    if df.empty:
+        issues.append(Issue("warning", "Logistics_Daily", "Tab is empty: Logistics pages show no figures"))
+        return pd.DataFrame(columns=cols)
+    miss = [c for c in LOGI_COLUMNS if c not in df.columns]
+    if miss:
+        issues.append(Issue("warning", "Logistics_Daily", f"Missing columns: {', '.join(miss)}"))
+    out = pd.DataFrame({"date": parse_dt(_col(df, "Date")), "country": clean(_col(df, "Country")).str.upper()})
+    for src, dst in LOGI_RENAME.items():
+        if dst in ("date", "country"):
+            continue
+        out[dst] = num(_col(df, src, "")) if src in df.columns else np.nan
+    bad = out["date"].isna().sum()
+    if bad:
+        issues.append(Issue("info", "Logistics_Daily", f"{bad} row(s) without a valid date were ignored"))
+    out = out[out["date"].notna()].copy()
+    out["country"] = out["country"].replace("", "Unknown")
+    num_cols = [c for c in cols if c not in ("date", "country")]
+    out[num_cols] = out[num_cols].fillna(0.0)
+    return out.reset_index(drop=True)

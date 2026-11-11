@@ -7,6 +7,7 @@ import streamlit as st
 import analytics as an
 import comparison as cmp
 import insights as ins
+import logi as L
 from kpis import is_missing
 import charts as CH
 import components as C
@@ -99,3 +100,22 @@ def page() -> None:
 
     C.section("KPI summary", "Scorecard KPIs with the approved targets.")
     show_team_table(team_table(ds, f), pl or "Previous")
+
+    # ---------------------------------------------------------------- logistics at a glance
+    if L.has_data(ds):
+        lt = L.targets()
+        ls = L.scorecard(ds, cur) if cur.scored else {}
+        lps = L.scorecard(ds, prev) if prev and prev.scored and cur.scored else {}
+        tl, tlp = L.totals(ds, cur), (L.totals(ds, prev) if prev else {})
+        lcov = L.coverage(ds, cur)
+        C.section("Logistics at a glance", "Team scorecard of the bonus calculator (all markets). Details on the "
+                  "Logistics pages." + (f" {lcov['maturity_note']}." if lcov.get("maturity_note") else ""))
+        C.kpi_grid([
+            dict(key="l_score", value=ls.get("l_score"), target=lt["l_score"], prev=lps.get("l_score") if lps else None,
+                 prev_label=pl, unavailable="" if cur.scored else "Per month and quarter only"),
+            dict(key="l_delivery", value=tl.get("l_delivery"), target=lt["l_delivery"],
+                 prev=tlp.get("l_delivery") if prev else None, prev_label=pl),
+            dict(key="l_ontime", value=tl.get("l_ontime"), target=lt["l_ontime"],
+                 prev=tlp.get("l_ontime") if prev else None, prev_label=pl),
+            dict(key="l_orders", value=tl.get("l_orders"), prev=tlp.get("l_orders") if prev else None, prev_label=pl),
+        ], cols=4)
