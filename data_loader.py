@@ -6,6 +6,7 @@ Production (Streamlit Cloud) uses a Google service account stored in st.secrets:
     [sheets]
     cs_spreadsheet_id     = "..."
     orders_spreadsheet_id = "..."
+    chats_spreadsheet_id  = "..."   # optional: "CS Chats Clean" file holding CS_Chats
 
 Large tabs are downloaded as CSV through the authenticated export endpoint (fast, and identical to File >
 Download > CSV); small tabs are read in one Sheets API batch call. Every value is kept as text exactly as the
@@ -123,13 +124,20 @@ def _values_batch(sess, spreadsheet_id: str, titles: list) -> dict:
     return out
 
 
-def load_google(sa_info: dict, cs_id: str, orders_id: str) -> RawData:
+def load_google(sa_info: dict, cs_id: str, orders_id: str, chats_id: str = "") -> RawData:
+    """chats_id (Nov 2026): CS_Chats lives in its own file ("CS Chats Clean"). When set, CS_Chats is read from
+    that file; every other Customer Support tab still comes from cs_id."""
     out = RawData(source="Google Sheets")
     sess = _session(sa_info)
     cs_ids = _sheet_ids(sess, cs_id)
+    chats_tab = CS_TABS["chats"]
+    chats_ids = _sheet_ids(sess, chats_id) if chats_id else {}
     small = [t for k, t in CS_TABS.items() if k not in LARGE_TABS and t in cs_ids]
     batch = _values_batch(sess, cs_id, small)
     for key, tab in CS_TABS.items():
+        if key == "chats" and chats_tab in chats_ids:
+            out.frames[key] = _export_csv(sess, chats_id, chats_ids[chats_tab], key)
+            continue
         if tab not in cs_ids:
             out.missing.append(tab)
             continue
@@ -171,4 +179,5 @@ def load_raw(secrets) -> RawData:
     sh = secrets.get("sheets", {}) or {}
     cs_id = sh.get("cs_spreadsheet_id") or secrets.get("cs_spreadsheet_id") or DEFAULT_CS_ID
     orders_id = sh.get("orders_spreadsheet_id") or secrets.get("orders_spreadsheet_id") or DEFAULT_ORDERS_ID
-    return load_google(sa, cs_id, orders_id)
+    chats_id = sh.get("chats_spreadsheet_id") or secrets.get("chats_spreadsheet_id") or ""
+    return load_google(sa, cs_id, orders_id, chats_id)
