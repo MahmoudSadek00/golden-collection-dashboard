@@ -141,8 +141,6 @@ def insight_cards(items: list, limit: int | None = None, empty: str = "No findin
         body = f"<p>{esc(i.what)}</p>"
         if i.why:
             body += f"<p><b>Why it matters:</b> {esc(i.why)}</p>"
-        if i.action:
-            body += f"<p><b>Recommended action:</b> {esc(i.action)}</p>"
         kind = f'<span class="kind">{esc(i.basis)}</span>' if i.basis != "Confirmed" else ""
         st.markdown(f"""<div class="gc-insight" style="--sev:{s['color']}"><div class="t"><span class="tag">{s['label']}</span>
             {esc(i.title)} {kind}</div><div class="b">{body}</div></div>""", unsafe_allow_html=True)
