@@ -13,13 +13,13 @@ from common import header
 TEAMS = ["Customer Support", "Logistics", "Both teams"]
 PRESETS = {
     "Full management report": SECTIONS,
-    "Executive summary": ["Executive Summary", "KPI Performance", "Insights & Actions"],
-    "Period comparison": ["Executive Summary", "Period Comparison", "Insights & Actions"],
+    "Executive summary": ["Executive Summary", "KPI Performance", "Findings"],
+    "Period comparison": ["Executive Summary", "Period Comparison", "Findings"],
     "Team & agent review": ["KPI Performance", "Team Performance", "Individual Performance", "Detailed Data"],
 }
 LOGI_PRESETS = {
     "Full logistics report": LOGI_SECTIONS,
-    "Summary only": ["Logistics Summary", "Logistics Insights"],
+    "Summary only": ["Logistics Summary", "Logistics Findings"],
     "Markets review": ["Logistics Summary", "Logistics Markets"],
 }
 
@@ -78,3 +78,4 @@ def page() -> None:
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                use_container_width=True)
             st.caption("The download matches the scope shown above.")
+        
