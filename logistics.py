@@ -101,7 +101,6 @@ def insights(ds, cur, prev, ctry) -> list:
             lost = {"Delivery rate": LOGI_CFG["points"]["delivery"] - s["pts"]["delivery"],
                     "On-time delivery": LOGI_CFG["points"]["ontime"] - s["pts"]["ontime"],
                     "Markets within window": LOGI_CFG["points"]["markets"] - s["pts"]["markets"]}
-            worst = max(lost, key=lost.get)
             prev_txt = f" ({sp['l_score']:.1f} in {pl})" if sp and not is_missing(sp.get("l_score")) else ""
             if s["l_score"] < s["target"]:
                 out.append(Insight("critical" if s["l_score"] < 80 else "warning", "Team",
@@ -109,8 +108,7 @@ def insights(ds, cur, prev, ctry) -> list:
                                    f"Score {s['l_score']:.1f}{prev_txt}. Points lost: " +
                                    "; ".join(f"{k} {v:.1f}" for k, v in lost.items() if v > 0.05) + ".",
                                    "The logistics score is the agreed team measure in the bonus calculator (target 90, "
-                                   "no bonus below 80).", f"Focus on {worst.lower()}: it loses the most points.",
-                                   basis, 100 - s["l_score"]))
+                                   "no bonus below 80).", basis, 100 - s["l_score"]))
             else:
                 out.append(Insight("positive", "Team", f"Logistics score on target: {s['l_score']:.1f}",
                                    f"Score {s['l_score']:.1f} against a target of {s['target']:.0f}{prev_txt}.",
@@ -131,7 +129,6 @@ def insights(ds, cur, prev, ctry) -> list:
                                "Every point below 95% costs logistics score points; at 85% or less the KPI earns nothing."
                                if k == "l_delivery" else
                                "Late deliveries hurt customer experience and cost score points (85% or less = 0).",
-                               f"Review shipments in {L.name(low.iloc[0].country)} first." if len(low) else "",
                                basis, (t - v) * 100))
         if tp and not is_missing(tp.get(k)) and trend(k, v, tp[k]) == "improved":
             out.append(Insight("positive", "KPI", f"{label} improved: {fmt_delta(k, v - tp[k])} vs {pl}",
@@ -145,7 +142,7 @@ def insights(ds, cur, prev, ctry) -> list:
                                      if not is_missing(r.l_dlv_days) else f"{L.name(r.country)}: no delivered orders"
                                      for _, r in outside.iterrows()) + ".",
                            "Each market outside its window reduces the markets score (60% or less = 0 points).",
-                           "Check courier transit times for these markets.", basis, 10 * len(outside)))
+                           basis, 10 * len(outside)))
 
     if tp:
         for k, sev_up in (("l_return_rate", 0.01), ("l_cancel_rate", 0.02)):
@@ -160,7 +157,7 @@ def insights(ds, cur, prev, ctry) -> list:
                 out.append(Insight("warning", "Operations", f"{ALL_KPIS[k].label} up {fmt_delta(k, v - p_)} vs {pl}",
                                    f"{ALL_KPIS[k].label} {fmt(k, v)} vs {fmt(k, p_)} in {pl}.",
                                    "Returned and cancelled orders are lost sales and wasted shipping cost.",
-                                   "Break the change down by market on the Markets page.", basis, (v - p_) * 100))
+                                   basis, (v - p_) * 100))
         if not bp.empty:
             slower = []
             for _, r in bc.iterrows():
@@ -173,7 +170,7 @@ def insights(ds, cur, prev, ctry) -> list:
                                    ", ".join(L.name(c) for c, _, _ in slower),
                                    "; ".join(f"{L.name(c)} {v:.1f} days ({d:+.1f} vs {pl})" for c, v, d in slower) + ".",
                                    "Slower deliveries put the on-time rate and the market window at risk.",
-                                   "Follow up with the courier for these markets.", basis, 5 * len(slower)))
+                                   basis, 5 * len(slower)))
     if not cov["mature"]:
         out.append(Insight("info", "Data", "Recent orders still in transit", cov["maturity_note"] + ".",
                            basis="Data note"))
